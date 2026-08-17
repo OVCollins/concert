@@ -422,8 +422,8 @@ export default function Home() {
 
       <div style={S.wrap}>
         <div style={S.header}>
-          <p style={S.eyebrow}>Glory Life Choir · Bariga Division</p>
-          <h1 style={S.h1}>Personalise Your Flyer</h1>
+          <p style={S.eyebrow}>CCCGi · Glory Life Choir · Bariga Division</p>
+          <h1 style={S.h1}>Personalise Your Flyer For GRATITUDE 17</h1>
           <p style={S.sub}>Tap the photo frame to add your picture · tap the name banner to type</p>
         </div>
 
