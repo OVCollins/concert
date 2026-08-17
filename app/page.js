@@ -4,13 +4,13 @@ import { useRef, useState, useEffect, useCallback } from 'react'
 
 // ── Slot coordinates on 3919×3919 source image ──────────────────────────────
 const FLYER_SRC  = 3919
-const PHOTO_SLOT = { x: 1972, y: 1138, w: 1793, h: 1547, r: 120 }
-const NAME_SLOT  = { x: 2107, y: 2079, w: 1522, h: 370,  r: 100 }
+const PHOTO_SLOT = { x: 1972, y: 1138, w: 1793, h: 1600, r: 125 }
+const NAME_SLOT  = { x: 2107, y: 2679, w: 1522, h: 400,  r: 100 }
 
 // Confirmed stamp: centre point and size on source image
 const STAMP = {
-  cx: 1972 + Math.round(1793 * 0.08),
-  cy: 1138 + 1547 - Math.round(1100 * 0.25),
+  cx: 1872 + Math.round(1693 * 0.08),
+  cy: 1038 + 1447 - Math.round(1000 * 0.25),
   size: 1100,
   angle: -15,
 }
