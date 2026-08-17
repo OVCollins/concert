@@ -5,12 +5,12 @@ import { useRef, useState, useEffect, useCallback } from 'react'
 // ── Slot coordinates on 3919×3919 source image ──────────────────────────────
 const FLYER_SRC  = 3919
 const PHOTO_SLOT = { x: 1972, y: 1138, w: 1793, h: 1600, r: 125 }
-const NAME_SLOT  = { x: 2107, y: 2379, w: 1522, h: 1000,  r: 100 }
+const NAME_SLOT  = { x: 2107, y: 2879, w: 1522, h: 3000,  r: 100 }
 
 // Confirmed stamp: centre point and size on source image
 const STAMP = {
   cx: 1872 + Math.round(1693 * 0.08),
-  cy: 1538 + 1947 - Math.round(1500 * 0.25),
+  cy: 1338 + 1747 - Math.round(1300 * 0.25),
   size: 1200,
   angle: -15,
 }
@@ -89,7 +89,7 @@ export default function Home() {
     if (!inputRef.current || scale === 0) return
     const maxW = NAME_SLOT.w * scale - 24
     const el   = inputRef.current
-    let fs = Math.round(NAME_SLOT.h * scale * 2)
+    let fs = Math.round(NAME_SLOT.h * scale * 5)
     el.style.fontSize = fs + 'px'
     while (el.scrollWidth > maxW && fs > 9) {
       fs -= 1
