@@ -400,7 +400,7 @@ export default function Home() {
               ref={inputRef}
               value={name}
               onChange={e => setName(e.target.value)}
-              placeholder="Type your name"
+              placeholder="Type your name here"
               maxLength={80}
               rows={2}
               style={{
@@ -542,7 +542,7 @@ const S = {
     alignItems: 'center',
     justifyContent: 'center',
     background: '#ffffff',
-    border: '3px solid #000000',
+    border: '2px solid #000000',
     boxSizing: 'border-box',
   },
   nameInput: {
@@ -561,7 +561,7 @@ const S = {
     resize: 'none',
     overflow: 'hidden',
     caretColor: '#1a1a2e',
-    lineHeight: 1.3,
+    lineHeight: 2.6,
     wordBreak: 'break-word',
     whiteSpace: 'normal',
     display: 'flex',
