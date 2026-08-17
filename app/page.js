@@ -467,7 +467,7 @@ export default function Home() {
               value={name}
               onChange={e => setName(e.target.value)}
               placeholder="Type your name here"
-              maxLength={30}
+              maxLength={35}
               rows={1}
               style={{
                 ...S.nameInput,
