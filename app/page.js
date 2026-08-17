@@ -5,7 +5,7 @@ import { useRef, useState, useEffect, useCallback } from 'react'
 // ── Slot coordinates on 3919×3919 source image ──────────────────────────────
 const FLYER_SRC  = 3919
 const PHOTO_SLOT = { x: 1972, y: 1138, w: 1793, h: 1600, r: 125 }
-const NAME_SLOT  = { x: 2107, y: 2823, w: 1522, h: 350,  r: 100 }
+const NAME_SLOT  = { x: 2107, y: 2810, w: 1522, h: 350,  r: 100 }
 
 // Confirmed stamp: centre point and size on source image
 const STAMP = {
@@ -32,15 +32,10 @@ function roundedClip(ctx, s) {
 }
 
 // ── Word-wrap helper for canvas download ─────────────────────────────────────
-// Returns 1 or 2 lines that fit within maxWidth at the given font size
 function wrapText(ctx, text, maxWidth) {
   const words = text.split(' ')
   if (words.length === 1) return [text]
-  
-  // Try fitting on one line first
   if (ctx.measureText(text).width <= maxWidth) return [text]
-  
-  // Find best 2-line split
   let bestSplit = 1
   let bestDiff  = Infinity
   for (let i = 1; i < words.length; i++) {
@@ -70,6 +65,7 @@ export default function Home() {
   const [working,         setWorking]          = useState(false)
   const [scale,           setScale]            = useState(1)
   const [fontSize,        setFontSize]         = useState(18)
+  const [twoLines,        setTwoLines]         = useState(false)
   const [cropping,        setCropping]         = useState(false)
   const [cropImg,         setCropImg]          = useState(null)
   const [cropOffset,      setCropOffset]       = useState({ x: 0, y: 0 })
@@ -104,31 +100,38 @@ export default function Home() {
   }, [])
 
   // ── Smart font sizing ──────────────────────────────────────────────────────
-  // Start large, shrink until text fits in ONE line.
-  // If it still doesn't fit at minimum single-line size, allow 2 lines at a
-  // reduced size. Max 2 lines always.
   useEffect(() => {
-    if (!textareaRef.current || scale === 0) return
-    const el      = textareaRef.current
-    const bannerW = NAME_SLOT.w * scale
-    const maxW    = bannerW - 28   // horizontal padding
-    const maxFs   = Math.round(NAME_SLOT.h * scale * 0.70)  // tallest allowed
-    const minFs1L = Math.round(NAME_SLOT.h * scale * 0.42)  // shrink threshold before wrapping
-    const minFs2L = Math.round(NAME_SLOT.h * scale * 0.34)  // minimum for 2-line mode
+    if (scale === 0) return
 
-    // Use a hidden measuring span
+    const bannerW = NAME_SLOT.w * scale
+    const maxW    = bannerW - 28
+    const maxFs   = Math.round(NAME_SLOT.h * scale * 0.70)
+    const minFs1L = Math.round(NAME_SLOT.h * scale * 0.42)
+    const minFs2L = Math.round(NAME_SLOT.h * scale * 0.28)
+
+    // Use an off-screen measuring span
     let span = document.getElementById('__nameSpan')
     if (!span) {
       span = document.createElement('span')
       span.id = '__nameSpan'
-      span.style.cssText = 'position:fixed;top:-9999px;left:-9999px;white-space:nowrap;font-family:Georgia,"Times New Roman",serif;font-weight:700;visibility:hidden'
+      span.style.cssText = [
+        'position:fixed',
+        'top:-9999px',
+        'left:-9999px',
+        'visibility:hidden',
+        'font-family:Georgia,"Times New Roman",serif',
+        'font-weight:700',
+        'white-space:nowrap',
+      ].join(';')
       document.body.appendChild(span)
     }
 
-    const label = name.trim() || ''
-    span.textContent = label
+    const label = name.trim()
+    span.textContent = label || 'A'
 
-    // Try shrinking at single-line until minFs1L
+    // 1. Try single line — shrink from maxFs down to minFs1L
+    span.style.whiteSpace = 'nowrap'
+    span.style.width      = 'auto'
     let fs = maxFs
     span.style.fontSize = fs + 'px'
     while (span.offsetWidth > maxW && fs > minFs1L) {
@@ -136,30 +139,59 @@ export default function Home() {
       span.style.fontSize = fs + 'px'
     }
 
-    if (span.offsetWidth <= maxW) {
+    if (span.offsetWidth <= maxW || !label) {
       // Fits on one line
-      el.style.fontSize  = fs + 'px'
-      el.style.whiteSpace = 'nowrap'
-      el.rows = 1
       setFontSize(fs)
+      setTwoLines(false)
       return
     }
 
-    // Doesn't fit on one line — switch to 2-line wrap
-    // Shrink until both lines fit
+    // 2. Doesn't fit on one line — measure each half of words at minFs1L
+    //    and shrink further until the longest half fits
+    const words = label.split(' ')
     fs = minFs1L
-    span.style.whiteSpace = 'normal'
-    span.style.width = maxW + 'px'
-    span.textContent = label
-    while (span.offsetHeight > NAME_SLOT.h * scale * 0.85 && fs > minFs2L) {
-      fs -= 1
-      span.style.fontSize = fs + 'px'
+    span.style.whiteSpace = 'nowrap'
+
+    if (words.length > 1) {
+      // Find the best split and measure the longer of the two halves
+      let bestSplit = Math.ceil(words.length / 2)
+      let bestDiff  = Infinity
+      for (let i = 1; i < words.length; i++) {
+        const l1 = words.slice(0, i).join(' ')
+        const l2 = words.slice(i).join(' ')
+        span.style.fontSize = fs + 'px'
+        span.textContent = l1
+        const w1 = span.offsetWidth
+        span.textContent = l2
+        const w2 = span.offsetWidth
+        const diff = Math.abs(w1 - w2)
+        if (diff < bestDiff) { bestDiff = diff; bestSplit = i }
+      }
+
+      const line1 = words.slice(0, bestSplit).join(' ')
+      const line2 = words.slice(bestSplit).join(' ')
+
+      // Shrink until both lines fit within maxW
+      while (fs > minFs2L) {
+        span.style.fontSize = fs + 'px'
+        span.textContent = line1
+        const w1 = span.offsetWidth
+        span.textContent = line2
+        const w2 = span.offsetWidth
+        if (Math.max(w1, w2) <= maxW) break
+        fs -= 1
+      }
+    } else {
+      // Single word that's too long — just shrink until it fits
+      span.textContent = label
+      while (span.offsetWidth > maxW && fs > minFs2L) {
+        fs -= 1
+        span.style.fontSize = fs + 'px'
+      }
     }
 
-    el.style.fontSize   = fs + 'px'
-    el.style.whiteSpace = 'normal'
-    el.rows = 2
     setFontSize(fs)
+    setTwoLines(true)
   }, [name, scale])
 
   // ── Draw crop canvas ───────────────────────────────────────────────────────
@@ -169,29 +201,24 @@ export default function Home() {
     const ctx = canvas.getContext('2d')
     const CW  = canvas.width
     const CH  = canvas.height
-
     ctx.clearRect(0, 0, CW, CH)
     const iw = cropImg.naturalWidth  * cropZoom
     const ih = cropImg.naturalHeight * cropZoom
     const dx = (CW - iw) / 2 + cropOffset.x
     const dy = (CH - ih) / 2 + cropOffset.y
     ctx.drawImage(cropImg, dx, dy, iw, ih)
-
     ctx.fillStyle = 'rgba(0,0,0,0.55)'
     ctx.fillRect(0, 0, CW, CH)
-
     const fr = PHOTO_SLOT.r / FLYER_SRC * CW
     roundedClip(ctx, { x: 0, y: 0, w: CW, h: CH, r: fr })
     ctx.globalCompositeOperation = 'destination-out'
     ctx.fill()
     ctx.globalCompositeOperation = 'source-over'
-
     ctx.save()
     roundedClip(ctx, { x: 0, y: 0, w: CW, h: CH, r: fr })
     ctx.clip()
     ctx.drawImage(cropImg, dx, dy, iw, ih)
     ctx.restore()
-
     ctx.save()
     roundedClip(ctx, { x: 2, y: 2, w: CW - 4, h: CH - 4, r: fr })
     ctx.strokeStyle = '#f5c842'
@@ -228,7 +255,6 @@ export default function Home() {
     setDragStart({ x: pt.clientX, y: pt.clientY })
     setCropOffsetStart({ ...cropOffset })
   }
-
   function onCropMouseMove(e) {
     if (!dragStart) return
     const pt       = e.touches ? e.touches[0] : e
@@ -240,7 +266,6 @@ export default function Home() {
       y: cropOffsetStart.y + (pt.clientY - dragStart.y) * srcScale,
     })
   }
-
   function onCropMouseUp() { setDragStart(null) }
 
   // ── Commit crop ────────────────────────────────────────────────────────────
@@ -283,6 +308,17 @@ export default function Home() {
       ctx.restore()
     }
 
+    // Stamp BEFORE name banner so banner sits on top
+    if (stampRef.current) {
+      const stampH = STAMP.size * (stampRef.current.naturalHeight / stampRef.current.naturalWidth)
+      ctx.save()
+      ctx.translate(STAMP.cx, STAMP.cy)
+      ctx.rotate(STAMP.angle * Math.PI / 180)
+      ctx.drawImage(stampRef.current, -STAMP.size / 2, -stampH / 2, STAMP.size, stampH)
+      ctx.restore()
+    }
+
+    // Name banner on top of stamp
     const label = name.trim()
     if (label) {
       ctx.save()
@@ -295,33 +331,30 @@ export default function Home() {
       ctx.stroke()
 
       const maxW   = NAME_SLOT.w - 80
-      const maxFs  = Math.round(NAME_SLOT.h * 0.72)
+      const maxFs  = Math.round(NAME_SLOT.h * 0.70)
       const minFs1 = Math.round(NAME_SLOT.h * 0.42)
-      const minFs2 = Math.round(NAME_SLOT.h * 0.34)
+      const minFs2 = Math.round(NAME_SLOT.h * 0.28)
 
       ctx.fillStyle    = '#1a1a2e'
       ctx.textAlign    = 'center'
       ctx.textBaseline = 'middle'
-      ctx.font = `bold ${maxFs}px Georgia, serif`
 
-      // Shrink to fit one line
       let fs = maxFs
+      ctx.font = `bold ${fs}px Georgia, serif`
       while (ctx.measureText(label).width > maxW && fs > minFs1) {
         fs -= 2
         ctx.font = `bold ${fs}px Georgia, serif`
       }
 
       if (ctx.measureText(label).width <= maxW) {
-        // Single line
         ctx.fillText(label, NAME_SLOT.x + NAME_SLOT.w / 2, NAME_SLOT.y + NAME_SLOT.h / 2)
       } else {
-        // Two lines — shrink until both fit
         while (fs > minFs2) {
           ctx.font = `bold ${fs}px Georgia, serif`
           const lines = wrapText(ctx, label, maxW)
           const fits  = lines.every(l => ctx.measureText(l).width <= maxW)
           if (fits) {
-            const lineH = fs * 1.25
+            const lineH  = fs * 1.25
             const startY = NAME_SLOT.y + NAME_SLOT.h / 2 - (lines.length - 1) * lineH / 2
             lines.forEach((l, i) => ctx.fillText(l, NAME_SLOT.x + NAME_SLOT.w / 2, startY + i * lineH))
             break
@@ -329,15 +362,6 @@ export default function Home() {
           fs -= 2
         }
       }
-      ctx.restore()
-    }
-
-    if (stampRef.current) {
-      const stampH = STAMP.size * (stampRef.current.naturalHeight / stampRef.current.naturalWidth)
-      ctx.save()
-      ctx.translate(STAMP.cx, STAMP.cy)
-      ctx.rotate(STAMP.angle * Math.PI / 180)
-      ctx.drawImage(stampRef.current, -STAMP.size / 2, -stampH / 2, STAMP.size, stampH)
       ctx.restore()
     }
 
@@ -422,8 +446,8 @@ export default function Home() {
 
       <div style={S.wrap}>
         <div style={S.header}>
-          <p style={S.eyebrow}>CCCGi · Glory Life Choir · Bariga Division</p>
-          <h1 style={S.h1}>Personalise Your Flyer For GRATITUDE 17</h1>
+          <p style={S.eyebrow}>Glory Life Choir · Bariga Division</p>
+          <h1 style={S.h1}>Personalise Your Flyer</h1>
           <p style={S.sub}>Tap the photo frame to add your picture · tap the name banner to type</p>
         </div>
 
@@ -433,6 +457,7 @@ export default function Home() {
             : <div style={S.loading}>Loading…</div>
           }
 
+          {/* Photo frame */}
           <div
             style={{
               ...S.photoSlot, ...photo,
@@ -455,23 +480,26 @@ export default function Home() {
             {photoDrag && <div style={S.dropFlash} />}
           </div>
 
+          {/* Stamp — rendered BEFORE name banner so it sits below it in z-order */}
           {stampReady && (
             <img src="/confirmed.png" alt="" draggable={false}
               style={{ position: 'absolute', pointerEvents: 'none', userSelect: 'none', ...stampDisp }}
             />
           )}
 
+          {/* Name banner — rendered AFTER stamp so it sits on top */}
           <div style={{ ...S.nameBanner, ...nameBox }}>
             <textarea
               ref={textareaRef}
               value={name}
               onChange={e => setName(e.target.value)}
               placeholder="Type your name here"
-              maxLength={35}
-              rows={1}
+              maxLength={80}
+              rows={twoLines ? 2 : 1}
               style={{
                 ...S.nameInput,
                 fontSize:     fontSize,
+                whiteSpace:   twoLines ? 'normal' : 'nowrap',
                 borderRadius: NAME_SLOT.r * scale,
               }}
               spellCheck={false}
@@ -504,9 +532,7 @@ const S = {
   page: {
     minHeight: '100vh',
     background: 'linear-gradient(150deg, #07101f 0%, #0d1b3e 55%, #1a0b10 100%)',
-    display: 'flex',
-    alignItems: 'flex-start',
-    justifyContent: 'center',
+    display: 'flex', alignItems: 'flex-start', justifyContent: 'center',
     padding: '36px 16px 64px',
     fontFamily: '"Segoe UI", system-ui, -apple-system, sans-serif',
     boxSizing: 'border-box',
