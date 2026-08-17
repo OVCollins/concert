@@ -4,15 +4,15 @@ import { useRef, useState, useEffect, useCallback } from 'react'
 
 // ── Slot coordinates on 3919×3919 source image ──────────────────────────────
 const FLYER_SRC  = 3919
-const PHOTO_SLOT = { x: 2121, y: 1138, w: 1495, h: 1289, r: 110 }
-const NAME_SLOT  = { x: 2234, y: 2479, w: 1268, h: 330,  r: 100 }
+const PHOTO_SLOT = { x: 1972, y: 1138, w: 1793, h: 1547, r: 110 }
+const NAME_SLOT  = { x: 2107, y: 2479, w: 1522, h: 330,  r: 100 }
 
 // Confirmed stamp: centre point and size on source image
 const STAMP = {
-  cx: 2121 + Math.round(1495 * 0.18),  // slightly left-of-centre of frame left edge
-  cy: 1138 + 1289 - Math.round(822 * 0.35),
-  size: 822,
-  angle: -15,  // degrees
+  cx: 1972 + Math.round(1793 * 0.08),
+  cy: 1138 + 1547 - Math.round(1100 * 0.25),
+  size: 1100,
+  angle: -15,
 }
 
 // ── Canvas helpers ───────────────────────────────────────────────────────────
@@ -89,7 +89,7 @@ export default function Home() {
     if (!inputRef.current || scale === 0) return
     const maxW = NAME_SLOT.w * scale - 24
     const el   = inputRef.current
-    let fs = Math.round(NAME_SLOT.h * scale * 0.42)
+    let fs = Math.round(NAME_SLOT.h * scale * 0.58)
     el.style.fontSize = fs + 'px'
     while (el.scrollWidth > maxW && fs > 9) {
       fs -= 1
@@ -241,7 +241,7 @@ export default function Home() {
       ctx.clip()
       ctx.fillStyle = '#ffffff'
       ctx.fill()
-      let fs = Math.round(NAME_SLOT.h * 0.42)
+      let fs = Math.round(NAME_SLOT.h * 0.58)
       ctx.font = `bold ${fs}px Georgia, serif`
       ctx.fillStyle    = '#1a1a2e'
       ctx.textAlign    = 'center'
