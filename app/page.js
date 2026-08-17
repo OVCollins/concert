@@ -87,7 +87,7 @@ export default function Home() {
     if (!inputRef.current || scale === 0) return
     const maxW = NAME_SLOT.w * scale - 24
     const el   = inputRef.current
-    let fs = Math.round(NAME_SLOT.h * scale * 0.28)
+    let fs = Math.round(NAME_SLOT.h * scale * 0.68)
     el.style.fontSize = fs + 'px'
     while (el.scrollWidth > maxW && fs > 9) {
       fs -= 1
