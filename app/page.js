@@ -716,7 +716,7 @@ export default function Home() {
           <h1 style={S.h1}>
             Personalise Your Flyer for GRATITUDE 17
           </h1>
-          <p style={S.sub}>Tap the photo frame to add your picture · tap the name banner to type</p>
+          <p style={S.sub}>Tap the photo frame to add your picture · Tap the name banner to type your name</p>
 
         </div>
 
