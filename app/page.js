@@ -5,7 +5,7 @@ import { useRef, useState, useEffect, useCallback } from 'react'
 // ── Slot coordinates on 3919×3919 source image ──────────────────────────────
 const FLYER_SRC  = 3919
 const PHOTO_SLOT = { x: 1972, y: 1138, w: 1793, h: 1600, r: 125 }
-const NAME_SLOT  = { x: 2107, y: 2770, w: 1522, h: 350,  r: 100 }
+const NAME_SLOT  = { x: 2107, y: 2800, w: 1522, h: 350,  r: 100 }
 
 // Confirmed stamp: centre point and size on source image
 const STAMP = {
@@ -112,7 +112,7 @@ export default function Home() {
     const el      = textareaRef.current
     const bannerW = NAME_SLOT.w * scale
     const maxW    = bannerW - 28   // horizontal padding
-    const maxFs   = Math.round(NAME_SLOT.h * scale * 0.72)  // tallest allowed
+    const maxFs   = Math.round(NAME_SLOT.h * scale * 0.70)  // tallest allowed
     const minFs1L = Math.round(NAME_SLOT.h * scale * 0.42)  // shrink threshold before wrapping
     const minFs2L = Math.round(NAME_SLOT.h * scale * 0.34)  // minimum for 2-line mode
 
