@@ -5,7 +5,7 @@ import { useRef, useState, useEffect, useCallback } from 'react'
 // ── Slot coordinates on 3919×3919 source image ──────────────────────────────
 const FLYER_SRC  = 3919
 const PHOTO_SLOT = { x: 1972, y: 1138, w: 1793, h: 1600, r: 125 }
-const NAME_SLOT  = { x: 2107, y: 2879, w: 1522, h: 3000,  r: 100 }
+const NAME_SLOT  = { x: 2107, y: 2738, w: 1522, h: 330,  r: 100 }
 
 // Confirmed stamp: centre point and size on source image
 const STAMP = {
@@ -33,30 +33,28 @@ function roundedClip(ctx, s) {
 
 // ── Component ────────────────────────────────────────────────────────────────
 export default function Home() {
-  const flyerRef     = useRef(null)
-  const stampRef     = useRef(null)
-  const photoRef     = useRef(null)
-  const dlCanvas     = useRef(null)
-  const containerRef = useRef(null)
-  const inputRef     = useRef(null)
+  const flyerRef      = useRef(null)
+  const stampRef      = useRef(null)
+  const photoRef      = useRef(null)
+  const dlCanvas      = useRef(null)
+  const containerRef  = useRef(null)
+  const inputRef      = useRef(null)
   const cropCanvasRef = useRef(null)
 
-  const [flyerReady,  setFlyerReady]  = useState(false)
-  const [stampReady,  setStampReady]  = useState(false)
-  const [photoSrc,    setPhotoSrc]    = useState(null)
-  const [name,        setName]        = useState('')
-  const [photoDrag,   setPhotoDrag]   = useState(false)
-  const [working,     setWorking]     = useState(false)
-  const [scale,       setScale]       = useState(1)
-  const [fontSize,    setFontSize]    = useState(18)
-
-  // Crop state
-  const [cropping,    setCropping]    = useState(false)
-  const [cropImg,     setCropImg]     = useState(null)   // raw img el before crop
-  const [cropOffset,  setCropOffset]  = useState({ x: 0, y: 0 })
-  const [cropZoom,    setCropZoom]    = useState(1)
-  const [dragStart,   setDragStart]   = useState(null)
-  const [cropOffsetStart, setCropOffsetStart] = useState({ x: 0, y: 0 })
+  const [flyerReady,       setFlyerReady]       = useState(false)
+  const [stampReady,       setStampReady]        = useState(false)
+  const [photoSrc,         setPhotoSrc]          = useState(null)
+  const [name,             setName]              = useState('')
+  const [photoDrag,        setPhotoDrag]         = useState(false)
+  const [working,          setWorking]           = useState(false)
+  const [scale,            setScale]             = useState(1)
+  const [fontSize,         setFontSize]          = useState(18)
+  const [cropping,         setCropping]          = useState(false)
+  const [cropImg,          setCropImg]           = useState(null)
+  const [cropOffset,       setCropOffset]        = useState({ x: 0, y: 0 })
+  const [cropZoom,         setCropZoom]          = useState(1)
+  const [dragStart,        setDragStart]         = useState(null)
+  const [cropOffsetStart,  setCropOffsetStart]   = useState({ x: 0, y: 0 })
 
   // ── Container scale ────────────────────────────────────────────────────────
   useEffect(() => {
@@ -89,7 +87,7 @@ export default function Home() {
     if (!inputRef.current || scale === 0) return
     const maxW = NAME_SLOT.w * scale - 24
     const el   = inputRef.current
-    let fs = Math.round(NAME_SLOT.h * scale * 5)
+    let fs = Math.round(NAME_SLOT.h * scale * 0.28)
     el.style.fontSize = fs + 'px'
     while (el.scrollWidth > maxW && fs > 9) {
       fs -= 1
@@ -108,14 +106,13 @@ export default function Home() {
 
     ctx.clearRect(0, 0, CW, CH)
 
-    // Draw photo at current offset + zoom
     const iw = cropImg.naturalWidth  * cropZoom
     const ih = cropImg.naturalHeight * cropZoom
     const dx = (CW - iw) / 2 + cropOffset.x
     const dy = (CH - ih) / 2 + cropOffset.y
     ctx.drawImage(cropImg, dx, dy, iw, ih)
 
-    // Dim outside crop frame
+    // Dim outside frame
     ctx.fillStyle = 'rgba(0,0,0,0.55)'
     ctx.fillRect(0, 0, CW, CH)
 
@@ -126,7 +123,7 @@ export default function Home() {
     ctx.fill()
     ctx.globalCompositeOperation = 'source-over'
 
-    // Redraw photo inside frame only
+    // Redraw photo inside frame
     ctx.save()
     roundedClip(ctx, { x: 0, y: 0, w: CW, h: CH, r: fr })
     ctx.clip()
@@ -135,7 +132,7 @@ export default function Home() {
 
     // Frame border
     ctx.save()
-    roundedClip(ctx, { x: 2, y: 2, w: CW-4, h: CH-4, r: fr })
+    roundedClip(ctx, { x: 2, y: 2, w: CW - 4, h: CH - 4, r: fr })
     ctx.strokeStyle = '#f5c842'
     ctx.lineWidth = 3
     ctx.stroke()
@@ -152,7 +149,6 @@ export default function Home() {
     img.onload = () => {
       setCropImg(img)
       setCropOffset({ x: 0, y: 0 })
-      // Initial zoom: fit image to fill frame (cover)
       const frameRatio = PHOTO_SLOT.w / PHOTO_SLOT.h
       const imgRatio   = img.naturalWidth / img.naturalHeight
       const zoom = imgRatio > frameRatio
@@ -177,33 +173,30 @@ export default function Home() {
     const pt = e.touches ? e.touches[0] : e
     const dx = pt.clientX - dragStart.x
     const dy = pt.clientY - dragStart.y
-    // Scale mouse delta to source image space
-    const canvas = cropCanvasRef.current
-    const dispW  = canvas ? canvas.offsetWidth : 1
+    const canvas   = cropCanvasRef.current
+    const dispW    = canvas ? canvas.offsetWidth : 1
     const srcScale = PHOTO_SLOT.w / dispW
     setCropOffset({
-      x: cropOffsetStart.x + dx * srcScale / cropZoom * cropZoom,
-      y: cropOffsetStart.y + dy * srcScale / cropZoom * cropZoom,
+      x: cropOffsetStart.x + dx * srcScale,
+      y: cropOffsetStart.y + dy * srcScale,
     })
   }
 
   function onCropMouseUp() { setDragStart(null) }
 
-  // ── Commit crop → render into photo slot ──────────────────────────────────
+  // ── Commit crop ────────────────────────────────────────────────────────────
   function commitCrop() {
     const canvas = document.createElement('canvas')
     canvas.width  = PHOTO_SLOT.w
     canvas.height = PHOTO_SLOT.h
     const ctx = canvas.getContext('2d')
-
     const iw = cropImg.naturalWidth  * cropZoom
     const ih = cropImg.naturalHeight * cropZoom
     const dx = (PHOTO_SLOT.w - iw) / 2 + cropOffset.x
     const dy = (PHOTO_SLOT.h - ih) / 2 + cropOffset.y
     ctx.drawImage(cropImg, dx, dy, iw, ih)
-
     const url = canvas.toDataURL('image/jpeg', 0.95)
-    const img  = new Image()
+    const img = new Image()
     img.onload = () => {
       photoRef.current = img
       setPhotoSrc(url)
@@ -233,33 +226,36 @@ export default function Home() {
       ctx.restore()
     }
 
-    // 3. Name banner text
+    // 3. Name banner — white fill + black border + text
     const label = name.trim()
     if (label) {
       ctx.save()
       roundedClip(ctx, NAME_SLOT)
       ctx.clip()
+      // White background
       ctx.fillStyle = '#ffffff'
       ctx.fill()
-      let fs = Math.round(NAME_SLOT.h * 0.58)
+      // Black border
+      ctx.strokeStyle = '#000000'
+      ctx.lineWidth = 12
+      ctx.stroke()
+      // Text
+      let fs = Math.round(NAME_SLOT.h * 0.28)
       ctx.font = `bold ${fs}px Georgia, serif`
       ctx.fillStyle    = '#1a1a2e'
       ctx.textAlign    = 'center'
       ctx.textBaseline = 'middle'
-      while (ctx.measureText(label).width > NAME_SLOT.w - 80 && fs > 28) {
-        fs -= 3
-        ctx.font = `bold ${fs}px Georgia, serif`
-      }
-      ctx.fillText(label, NAME_SLOT.x + NAME_SLOT.w / 2, NAME_SLOT.y + NAME_SLOT.h / 2)
+      ctx.fillText(label, NAME_SLOT.x + NAME_SLOT.w / 2, NAME_SLOT.y + NAME_SLOT.h / 2, NAME_SLOT.w - 80)
       ctx.restore()
     }
 
     // 4. Confirmed stamp on top, rotated -15°
     if (stampRef.current) {
+      const stampH = STAMP.size * (stampRef.current.naturalHeight / stampRef.current.naturalWidth)
       ctx.save()
       ctx.translate(STAMP.cx, STAMP.cy)
       ctx.rotate(STAMP.angle * Math.PI / 180)
-      ctx.drawImage(stampRef.current, -STAMP.size / 2, -STAMP.size * (stampRef.current.naturalHeight / stampRef.current.naturalWidth) / 2, STAMP.size, STAMP.size * (stampRef.current.naturalHeight / stampRef.current.naturalWidth))
+      ctx.drawImage(stampRef.current, -STAMP.size / 2, -stampH / 2, STAMP.size, stampH)
       ctx.restore()
     }
 
@@ -289,15 +285,17 @@ export default function Home() {
     height:       NAME_SLOT.h * scale,
     borderRadius: NAME_SLOT.r * scale,
   }
+  const stampH = stampRef.current
+    ? STAMP.size * (stampRef.current.naturalHeight / stampRef.current.naturalWidth)
+    : STAMP.size
   const stampDisp = {
     width:     STAMP.size * scale,
-    height:    STAMP.size * scale * (stampRef.current ? stampRef.current.naturalHeight / stampRef.current.naturalWidth : 1),
+    height:    stampH * scale,
     left:      (STAMP.cx - STAMP.size / 2) * scale,
-    top:       (STAMP.cy - STAMP.size / 2) * scale,
+    top:       (STAMP.cy - stampH / 2) * scale,
     transform: `rotate(${STAMP.angle}deg)`,
   }
 
-  // Crop canvas display size matches photo slot aspect ratio
   const CROP_DISP_W = Math.min(500, typeof window !== 'undefined' ? window.innerWidth - 48 : 500)
   const CROP_DISP_H = Math.round(CROP_DISP_W * PHOTO_SLOT.h / PHOTO_SLOT.w)
 
@@ -306,12 +304,11 @@ export default function Home() {
     <div style={S.page}>
       <canvas ref={dlCanvas} style={{ display: 'none' }} />
 
-      {/* ── Crop modal ── */}
+      {/* Crop modal */}
       {cropping && (
         <div style={S.cropOverlay}>
           <div style={S.cropModal}>
-            <p style={S.cropTitle}>Drag to reposition · Scroll to zoom</p>
-
+            <p style={S.cropTitle}>Drag to reposition · Scroll or use slider to zoom</p>
             <canvas
               ref={cropCanvasRef}
               width={PHOTO_SLOT.w}
@@ -329,7 +326,6 @@ export default function Home() {
                 setCropZoom(z => Math.max(0.3, Math.min(5, z - e.deltaY * 0.001)))
               }}
             />
-
             <div style={S.cropZoomRow}>
               <span style={S.cropLabel}>Zoom</span>
               <input type="range" min="0.3" max="5" step="0.01"
@@ -338,14 +334,9 @@ export default function Home() {
                 style={{ flex: 1 }}
               />
             </div>
-
             <div style={S.cropBtns}>
-              <button onClick={() => { setCropping(false); setCropImg(null) }} style={S.cropCancel}>
-                Cancel
-              </button>
-              <button onClick={commitCrop} style={S.cropConfirm}>
-                ✓ Use This Crop
-              </button>
+              <button onClick={() => { setCropping(false); setCropImg(null) }} style={S.cropCancel}>Cancel</button>
+              <button onClick={commitCrop} style={S.cropConfirm}>✓ Use This Crop</button>
             </div>
           </div>
         </div>
@@ -358,7 +349,6 @@ export default function Home() {
           <p style={S.sub}>Tap the photo frame to add your picture · tap the name banner to type</p>
         </div>
 
-        {/* ── Flyer with overlays ── */}
         <div ref={containerRef} style={S.flyerWrap}>
           {flyerReady
             ? <img src="/flyer.jpg" alt="Flyer" style={S.flyerImg} draggable={false} />
@@ -372,8 +362,8 @@ export default function Home() {
               ...photo,
               ...(photoDrag ? S.photoSlotDrag : {}),
               ...(photoSrc ? {
-                backgroundImage: `url(${photoSrc})`,
-                backgroundSize:  'cover',
+                backgroundImage:    `url(${photoSrc})`,
+                backgroundSize:     'cover',
                 backgroundPosition: 'center',
               } : {}),
             }}
@@ -394,30 +384,25 @@ export default function Home() {
             {photoDrag && <div style={S.dropFlash} />}
           </div>
 
-          {/* Stamp overlay — on top of photo */}
+          {/* Confirmed stamp */}
           {stampReady && (
             <img
               src="/confirmed.png"
               alt=""
               draggable={false}
-              style={{
-                position:        'absolute',
-                pointerEvents:   'none',
-                userSelect:      'none',
-                ...stampDisp,
-              }}
+              style={{ position: 'absolute', pointerEvents: 'none', userSelect: 'none', ...stampDisp }}
             />
           )}
 
           {/* Name banner */}
           <div style={{ ...S.nameBanner, ...nameBox }}>
-            <input
+            <textarea
               ref={inputRef}
-              type="text"
               value={name}
               onChange={e => setName(e.target.value)}
               placeholder="Type your name"
-              maxLength={45}
+              maxLength={80}
+              rows={2}
               style={{
                 ...S.nameInput,
                 fontSize:     fontSize,
@@ -556,6 +541,9 @@ const S = {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
+    background: '#ffffff',
+    border: '3px solid #000000',
+    boxSizing: 'border-box',
   },
   nameInput: {
     width: '100%',
@@ -568,12 +556,16 @@ const S = {
     fontWeight: 700,
     textAlign: 'center',
     cursor: 'text',
-    padding: '0 12px',
+    padding: '4px 12px',
     boxSizing: 'border-box',
-    whiteSpace: 'nowrap',
+    resize: 'none',
     overflow: 'hidden',
     caretColor: '#1a1a2e',
-    lineHeight: 5,
+    lineHeight: 1.3,
+    wordBreak: 'break-word',
+    whiteSpace: 'normal',
+    display: 'flex',
+    alignItems: 'center',
   },
   footer: {
     padding: '20px 4px 0',
@@ -600,8 +592,6 @@ const S = {
     lineHeight: 1.6,
     textAlign: 'center',
   },
-
-  // Crop modal
   cropOverlay: {
     position: 'fixed',
     inset: 0,
