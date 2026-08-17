@@ -5,7 +5,7 @@ import { useRef, useState, useEffect, useCallback } from 'react'
 // ── Slot coordinates on 3919×3919 source image ──────────────────────────────
 const FLYER_SRC  = 3919
 const PHOTO_SLOT = { x: 1972, y: 1138, w: 1793, h: 1600, r: 125 }
-const NAME_SLOT  = { x: 2107, y: 2938, w: 1522, h: 350,  r: 100 }
+const NAME_SLOT  = { x: 2107, y: 2770, w: 1522, h: 350,  r: 100 }
 
 // Confirmed stamp: centre point and size on source image
 const STAMP = {
@@ -31,6 +31,27 @@ function roundedClip(ctx, s) {
   ctx.closePath()
 }
 
+// ── Word-wrap helper for canvas download ─────────────────────────────────────
+// Returns 1 or 2 lines that fit within maxWidth at the given font size
+function wrapText(ctx, text, maxWidth) {
+  const words = text.split(' ')
+  if (words.length === 1) return [text]
+  
+  // Try fitting on one line first
+  if (ctx.measureText(text).width <= maxWidth) return [text]
+  
+  // Find best 2-line split
+  let bestSplit = 1
+  let bestDiff  = Infinity
+  for (let i = 1; i < words.length; i++) {
+    const line1 = words.slice(0, i).join(' ')
+    const line2 = words.slice(i).join(' ')
+    const diff  = Math.abs(ctx.measureText(line1).width - ctx.measureText(line2).width)
+    if (diff < bestDiff) { bestDiff = diff; bestSplit = i }
+  }
+  return [words.slice(0, bestSplit).join(' '), words.slice(bestSplit).join(' ')]
+}
+
 // ── Component ────────────────────────────────────────────────────────────────
 export default function Home() {
   const flyerRef      = useRef(null)
@@ -38,23 +59,23 @@ export default function Home() {
   const photoRef      = useRef(null)
   const dlCanvas      = useRef(null)
   const containerRef  = useRef(null)
-  const inputRef      = useRef(null)
+  const textareaRef   = useRef(null)
   const cropCanvasRef = useRef(null)
 
-  const [flyerReady,       setFlyerReady]       = useState(false)
-  const [stampReady,       setStampReady]        = useState(false)
-  const [photoSrc,         setPhotoSrc]          = useState(null)
-  const [name,             setName]              = useState('')
-  const [photoDrag,        setPhotoDrag]         = useState(false)
-  const [working,          setWorking]           = useState(false)
-  const [scale,            setScale]             = useState(1)
-  const [fontSize,         setFontSize]          = useState(18)
-  const [cropping,         setCropping]          = useState(false)
-  const [cropImg,          setCropImg]           = useState(null)
-  const [cropOffset,       setCropOffset]        = useState({ x: 0, y: 0 })
-  const [cropZoom,         setCropZoom]          = useState(1)
-  const [dragStart,        setDragStart]         = useState(null)
-  const [cropOffsetStart,  setCropOffsetStart]   = useState({ x: 0, y: 0 })
+  const [flyerReady,      setFlyerReady]      = useState(false)
+  const [stampReady,      setStampReady]       = useState(false)
+  const [photoSrc,        setPhotoSrc]         = useState(null)
+  const [name,            setName]             = useState('')
+  const [photoDrag,       setPhotoDrag]        = useState(false)
+  const [working,         setWorking]          = useState(false)
+  const [scale,           setScale]            = useState(1)
+  const [fontSize,        setFontSize]         = useState(18)
+  const [cropping,        setCropping]         = useState(false)
+  const [cropImg,         setCropImg]          = useState(null)
+  const [cropOffset,      setCropOffset]       = useState({ x: 0, y: 0 })
+  const [cropZoom,        setCropZoom]         = useState(1)
+  const [dragStart,       setDragStart]        = useState(null)
+  const [cropOffsetStart, setCropOffsetStart]  = useState({ x: 0, y: 0 })
 
   // ── Container scale ────────────────────────────────────────────────────────
   useEffect(() => {
@@ -82,66 +103,106 @@ export default function Home() {
     img.onload = () => { stampRef.current = img; setStampReady(true) }
   }, [])
 
-  // ── Auto-shrink name font ──────────────────────────────────────────────────
+  // ── Smart font sizing ──────────────────────────────────────────────────────
+  // Start large, shrink until text fits in ONE line.
+  // If it still doesn't fit at minimum single-line size, allow 2 lines at a
+  // reduced size. Max 2 lines always.
   useEffect(() => {
-    if (!inputRef.current || scale === 0) return
-    const maxW = NAME_SLOT.w * scale - 24
-    const el   = inputRef.current
-    let fs = Math.round(NAME_SLOT.h * scale * 0.68)
-    el.style.fontSize = fs + 'px'
-    while (el.scrollWidth > maxW && fs > 9) {
-      fs -= 1
-      el.style.fontSize = fs + 'px'
+    if (!textareaRef.current || scale === 0) return
+    const el      = textareaRef.current
+    const bannerW = NAME_SLOT.w * scale
+    const maxW    = bannerW - 28   // horizontal padding
+    const maxFs   = Math.round(NAME_SLOT.h * scale * 0.72)  // tallest allowed
+    const minFs1L = Math.round(NAME_SLOT.h * scale * 0.42)  // shrink threshold before wrapping
+    const minFs2L = Math.round(NAME_SLOT.h * scale * 0.34)  // minimum for 2-line mode
+
+    // Use a hidden measuring span
+    let span = document.getElementById('__nameSpan')
+    if (!span) {
+      span = document.createElement('span')
+      span.id = '__nameSpan'
+      span.style.cssText = 'position:fixed;top:-9999px;left:-9999px;white-space:nowrap;font-family:Georgia,"Times New Roman",serif;font-weight:700;visibility:hidden'
+      document.body.appendChild(span)
     }
+
+    const label = name.trim() || ''
+    span.textContent = label
+
+    // Try shrinking at single-line until minFs1L
+    let fs = maxFs
+    span.style.fontSize = fs + 'px'
+    while (span.offsetWidth > maxW && fs > minFs1L) {
+      fs -= 1
+      span.style.fontSize = fs + 'px'
+    }
+
+    if (span.offsetWidth <= maxW) {
+      // Fits on one line
+      el.style.fontSize  = fs + 'px'
+      el.style.whiteSpace = 'nowrap'
+      el.rows = 1
+      setFontSize(fs)
+      return
+    }
+
+    // Doesn't fit on one line — switch to 2-line wrap
+    // Shrink until both lines fit
+    fs = minFs1L
+    span.style.whiteSpace = 'normal'
+    span.style.width = maxW + 'px'
+    span.textContent = label
+    while (span.offsetHeight > NAME_SLOT.h * scale * 0.85 && fs > minFs2L) {
+      fs -= 1
+      span.style.fontSize = fs + 'px'
+    }
+
+    el.style.fontSize   = fs + 'px'
+    el.style.whiteSpace = 'normal'
+    el.rows = 2
     setFontSize(fs)
   }, [name, scale])
 
-  // ── Draw crop canvas preview ───────────────────────────────────────────────
+  // ── Draw crop canvas ───────────────────────────────────────────────────────
   const drawCrop = useCallback(() => {
     const canvas = cropCanvasRef.current
     if (!canvas || !cropImg) return
     const ctx = canvas.getContext('2d')
-    const CW = canvas.width
-    const CH = canvas.height
+    const CW  = canvas.width
+    const CH  = canvas.height
 
     ctx.clearRect(0, 0, CW, CH)
-
     const iw = cropImg.naturalWidth  * cropZoom
     const ih = cropImg.naturalHeight * cropZoom
     const dx = (CW - iw) / 2 + cropOffset.x
     const dy = (CH - ih) / 2 + cropOffset.y
     ctx.drawImage(cropImg, dx, dy, iw, ih)
 
-    // Dim outside frame
     ctx.fillStyle = 'rgba(0,0,0,0.55)'
     ctx.fillRect(0, 0, CW, CH)
 
-    // Cut out frame shape
     const fr = PHOTO_SLOT.r / FLYER_SRC * CW
     roundedClip(ctx, { x: 0, y: 0, w: CW, h: CH, r: fr })
     ctx.globalCompositeOperation = 'destination-out'
     ctx.fill()
     ctx.globalCompositeOperation = 'source-over'
 
-    // Redraw photo inside frame
     ctx.save()
     roundedClip(ctx, { x: 0, y: 0, w: CW, h: CH, r: fr })
     ctx.clip()
     ctx.drawImage(cropImg, dx, dy, iw, ih)
     ctx.restore()
 
-    // Frame border
     ctx.save()
     roundedClip(ctx, { x: 2, y: 2, w: CW - 4, h: CH - 4, r: fr })
     ctx.strokeStyle = '#f5c842'
-    ctx.lineWidth = 3
+    ctx.lineWidth   = 3
     ctx.stroke()
     ctx.restore()
   }, [cropImg, cropOffset, cropZoom])
 
   useEffect(() => { drawCrop() }, [drawCrop])
 
-  // ── Open crop tool ─────────────────────────────────────────────────────────
+  // ── Open crop ──────────────────────────────────────────────────────────────
   function openCrop(file) {
     if (!file || !file.type.startsWith('image/')) return
     const url = URL.createObjectURL(file)
@@ -160,7 +221,7 @@ export default function Home() {
     img.src = url
   }
 
-  // ── Crop drag handlers ─────────────────────────────────────────────────────
+  // ── Crop drag ──────────────────────────────────────────────────────────────
   function onCropMouseDown(e) {
     e.preventDefault()
     const pt = e.touches ? e.touches[0] : e
@@ -170,15 +231,13 @@ export default function Home() {
 
   function onCropMouseMove(e) {
     if (!dragStart) return
-    const pt = e.touches ? e.touches[0] : e
-    const dx = pt.clientX - dragStart.x
-    const dy = pt.clientY - dragStart.y
+    const pt       = e.touches ? e.touches[0] : e
     const canvas   = cropCanvasRef.current
     const dispW    = canvas ? canvas.offsetWidth : 1
     const srcScale = PHOTO_SLOT.w / dispW
     setCropOffset({
-      x: cropOffsetStart.x + dx * srcScale,
-      y: cropOffsetStart.y + dy * srcScale,
+      x: cropOffsetStart.x + (pt.clientX - dragStart.x) * srcScale,
+      y: cropOffsetStart.y + (pt.clientY - dragStart.y) * srcScale,
     })
   }
 
@@ -186,14 +245,14 @@ export default function Home() {
 
   // ── Commit crop ────────────────────────────────────────────────────────────
   function commitCrop() {
-    const canvas = document.createElement('canvas')
+    const canvas  = document.createElement('canvas')
     canvas.width  = PHOTO_SLOT.w
     canvas.height = PHOTO_SLOT.h
     const ctx = canvas.getContext('2d')
-    const iw = cropImg.naturalWidth  * cropZoom
-    const ih = cropImg.naturalHeight * cropZoom
-    const dx = (PHOTO_SLOT.w - iw) / 2 + cropOffset.x
-    const dy = (PHOTO_SLOT.h - ih) / 2 + cropOffset.y
+    const iw  = cropImg.naturalWidth  * cropZoom
+    const ih  = cropImg.naturalHeight * cropZoom
+    const dx  = (PHOTO_SLOT.w - iw) / 2 + cropOffset.x
+    const dy  = (PHOTO_SLOT.h - ih) / 2 + cropOffset.y
     ctx.drawImage(cropImg, dx, dy, iw, ih)
     const url = canvas.toDataURL('image/jpeg', 0.95)
     const img = new Image()
@@ -209,15 +268,13 @@ export default function Home() {
   // ── Download ───────────────────────────────────────────────────────────────
   function handleDownload() {
     setWorking(true)
-    const canvas = dlCanvas.current
+    const canvas  = dlCanvas.current
     canvas.width  = FLYER_SRC
     canvas.height = FLYER_SRC
-    const ctx = canvas.getContext('2d')
+    const ctx     = canvas.getContext('2d')
 
-    // 1. Flyer background
     ctx.drawImage(flyerRef.current, 0, 0, FLYER_SRC, FLYER_SRC)
 
-    // 2. Photo inside rounded frame
     if (photoRef.current) {
       ctx.save()
       roundedClip(ctx, PHOTO_SLOT)
@@ -226,30 +283,55 @@ export default function Home() {
       ctx.restore()
     }
 
-    // 3. Name banner — white fill + black border + text
     const label = name.trim()
     if (label) {
       ctx.save()
       roundedClip(ctx, NAME_SLOT)
       ctx.clip()
-      // White background
       ctx.fillStyle = '#ffffff'
       ctx.fill()
-      // Black border
       ctx.strokeStyle = '#000000'
-      ctx.lineWidth = 12
+      ctx.lineWidth   = 12
       ctx.stroke()
-      // Text
-      let fs = Math.round(NAME_SLOT.h * 0.28)
-      ctx.font = `bold ${fs}px Georgia, serif`
+
+      const maxW   = NAME_SLOT.w - 80
+      const maxFs  = Math.round(NAME_SLOT.h * 0.72)
+      const minFs1 = Math.round(NAME_SLOT.h * 0.42)
+      const minFs2 = Math.round(NAME_SLOT.h * 0.34)
+
       ctx.fillStyle    = '#1a1a2e'
       ctx.textAlign    = 'center'
       ctx.textBaseline = 'middle'
-      ctx.fillText(label, NAME_SLOT.x + NAME_SLOT.w / 2, NAME_SLOT.y + NAME_SLOT.h / 2, NAME_SLOT.w - 80)
+      ctx.font = `bold ${maxFs}px Georgia, serif`
+
+      // Shrink to fit one line
+      let fs = maxFs
+      while (ctx.measureText(label).width > maxW && fs > minFs1) {
+        fs -= 2
+        ctx.font = `bold ${fs}px Georgia, serif`
+      }
+
+      if (ctx.measureText(label).width <= maxW) {
+        // Single line
+        ctx.fillText(label, NAME_SLOT.x + NAME_SLOT.w / 2, NAME_SLOT.y + NAME_SLOT.h / 2)
+      } else {
+        // Two lines — shrink until both fit
+        while (fs > minFs2) {
+          ctx.font = `bold ${fs}px Georgia, serif`
+          const lines = wrapText(ctx, label, maxW)
+          const fits  = lines.every(l => ctx.measureText(l).width <= maxW)
+          if (fits) {
+            const lineH = fs * 1.25
+            const startY = NAME_SLOT.y + NAME_SLOT.h / 2 - (lines.length - 1) * lineH / 2
+            lines.forEach((l, i) => ctx.fillText(l, NAME_SLOT.x + NAME_SLOT.w / 2, startY + i * lineH))
+            break
+          }
+          fs -= 2
+        }
+      }
       ctx.restore()
     }
 
-    // 4. Confirmed stamp on top, rotated -15°
     if (stampRef.current) {
       const stampH = STAMP.size * (stampRef.current.naturalHeight / stampRef.current.naturalWidth)
       ctx.save()
@@ -270,7 +352,7 @@ export default function Home() {
     }, 80)
   }
 
-  // ── Overlay positions (display px) ────────────────────────────────────────
+  // ── Overlay positions ──────────────────────────────────────────────────────
   const photo = {
     left:         PHOTO_SLOT.x * scale,
     top:          PHOTO_SLOT.y * scale,
@@ -304,7 +386,6 @@ export default function Home() {
     <div style={S.page}>
       <canvas ref={dlCanvas} style={{ display: 'none' }} />
 
-      {/* Crop modal */}
       {cropping && (
         <div style={S.cropOverlay}>
           <div style={S.cropModal}>
@@ -321,10 +402,7 @@ export default function Home() {
               onTouchStart={onCropMouseDown}
               onTouchMove={onCropMouseMove}
               onTouchEnd={onCropMouseUp}
-              onWheel={e => {
-                e.preventDefault()
-                setCropZoom(z => Math.max(0.3, Math.min(5, z - e.deltaY * 0.001)))
-              }}
+              onWheel={e => { e.preventDefault(); setCropZoom(z => Math.max(0.3, Math.min(5, z - e.deltaY * 0.001))) }}
             />
             <div style={S.cropZoomRow}>
               <span style={S.cropLabel}>Zoom</span>
@@ -355,23 +433,16 @@ export default function Home() {
             : <div style={S.loading}>Loading…</div>
           }
 
-          {/* Photo frame */}
           <div
             style={{
-              ...S.photoSlot,
-              ...photo,
+              ...S.photoSlot, ...photo,
               ...(photoDrag ? S.photoSlotDrag : {}),
-              ...(photoSrc ? {
-                backgroundImage:    `url(${photoSrc})`,
-                backgroundSize:     'cover',
-                backgroundPosition: 'center',
-              } : {}),
+              ...(photoSrc ? { backgroundImage: `url(${photoSrc})`, backgroundSize: 'cover', backgroundPosition: 'center' } : {}),
             }}
             onDragOver={e => { e.preventDefault(); setPhotoDrag(true) }}
             onDragLeave={() => setPhotoDrag(false)}
             onDrop={e => { e.preventDefault(); setPhotoDrag(false); openCrop(e.dataTransfer.files[0]) }}
             onClick={() => document.getElementById('pi').click()}
-            title="Click or drop your photo here"
           >
             {!photoSrc && (
               <div style={S.photoPrompt}>
@@ -384,25 +455,20 @@ export default function Home() {
             {photoDrag && <div style={S.dropFlash} />}
           </div>
 
-          {/* Confirmed stamp */}
           {stampReady && (
-            <img
-              src="/confirmed.png"
-              alt=""
-              draggable={false}
+            <img src="/confirmed.png" alt="" draggable={false}
               style={{ position: 'absolute', pointerEvents: 'none', userSelect: 'none', ...stampDisp }}
             />
           )}
 
-          {/* Name banner */}
           <div style={{ ...S.nameBanner, ...nameBox }}>
             <textarea
-              ref={inputRef}
+              ref={textareaRef}
               value={name}
               onChange={e => setName(e.target.value)}
               placeholder="Type your name here"
               maxLength={80}
-              rows={2}
+              rows={1}
               style={{
                 ...S.nameInput,
                 fontSize:     fontSize,
@@ -445,218 +511,86 @@ const S = {
     fontFamily: '"Segoe UI", system-ui, -apple-system, sans-serif',
     boxSizing: 'border-box',
   },
-  wrap: {
-    width: '100%',
-    maxWidth: 580,
-    display: 'flex',
-    flexDirection: 'column',
-  },
+  wrap: { width: '100%', maxWidth: 580, display: 'flex', flexDirection: 'column' },
   header: { padding: '0 4px 16px' },
   eyebrow: {
-    margin: '0 0 6px',
-    fontSize: 11,
-    fontWeight: 600,
-    letterSpacing: '1.5px',
-    textTransform: 'uppercase',
-    color: 'rgba(245,200,66,0.55)',
+    margin: '0 0 6px', fontSize: 11, fontWeight: 600,
+    letterSpacing: '1.5px', textTransform: 'uppercase', color: 'rgba(245,200,66,0.55)',
   },
-  h1: {
-    margin: '0 0 4px',
-    fontSize: 24,
-    fontWeight: 700,
-    color: '#f5c842',
-    letterSpacing: '-0.3px',
-  },
-  sub: {
-    margin: 0,
-    fontSize: 13,
-    color: 'rgba(255,255,255,0.38)',
-    lineHeight: 1.5,
-  },
+  h1: { margin: '0 0 4px', fontSize: 24, fontWeight: 700, color: '#f5c842', letterSpacing: '-0.3px' },
+  sub: { margin: 0, fontSize: 13, color: 'rgba(255,255,255,0.38)', lineHeight: 1.5 },
   flyerWrap: {
-    position: 'relative',
-    width: '100%',
-    borderRadius: 12,
-    overflow: 'hidden',
-    boxShadow: '0 8px 40px rgba(0,0,0,0.6)',
-    lineHeight: 0,
+    position: 'relative', width: '100%', borderRadius: 12, overflow: 'hidden',
+    boxShadow: '0 8px 40px rgba(0,0,0,0.6)', lineHeight: 0,
   },
-  flyerImg: {
-    width: '100%',
-    height: 'auto',
-    display: 'block',
-    userSelect: 'none',
-    pointerEvents: 'none',
-  },
+  flyerImg: { width: '100%', height: 'auto', display: 'block', userSelect: 'none', pointerEvents: 'none' },
   loading: {
-    aspectRatio: '1/1',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    color: 'rgba(255,255,255,0.3)',
-    fontSize: 14,
-    background: '#0a0f1e',
+    aspectRatio: '1/1', display: 'flex', alignItems: 'center', justifyContent: 'center',
+    color: 'rgba(255,255,255,0.3)', fontSize: 14, background: '#0a0f1e',
   },
   photoSlot: {
-    position: 'absolute',
-    cursor: 'pointer',
-    overflow: 'hidden',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    boxSizing: 'border-box',
-    transition: 'box-shadow 0.15s',
+    position: 'absolute', cursor: 'pointer', overflow: 'hidden',
+    display: 'flex', alignItems: 'center', justifyContent: 'center',
+    boxSizing: 'border-box', transition: 'box-shadow 0.15s',
   },
-  photoSlotDrag: {
-    boxShadow: '0 0 0 4px #f5c842, 0 0 24px rgba(245,200,66,0.4)',
-  },
+  photoSlotDrag: { boxShadow: '0 0 0 4px #f5c842, 0 0 24px rgba(245,200,66,0.4)' },
   photoPrompt: {
-    display: 'flex',
-    flexDirection: 'column',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: '6%',
-    width: '100%',
-    height: '100%',
-    background: 'rgba(0,0,0,0.22)',
-    backdropFilter: 'blur(1px)',
+    display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+    gap: '6%', width: '100%', height: '100%',
+    background: 'rgba(0,0,0,0.22)', backdropFilter: 'blur(1px)',
   },
   photoText: {
-    fontWeight: 600,
-    color: '#fff',
-    textAlign: 'center',
-    padding: '0 10%',
-    textShadow: '0 1px 6px rgba(0,0,0,0.9)',
-    lineHeight: 1.3,
+    fontWeight: 600, color: '#fff', textAlign: 'center',
+    padding: '0 10%', textShadow: '0 1px 6px rgba(0,0,0,0.9)', lineHeight: 1.3,
   },
-  dropFlash: {
-    position: 'absolute',
-    inset: 0,
-    background: 'rgba(245,200,66,0.2)',
-    pointerEvents: 'none',
-  },
+  dropFlash: { position: 'absolute', inset: 0, background: 'rgba(245,200,66,0.2)', pointerEvents: 'none' },
   nameBanner: {
-    position: 'absolute',
-    overflow: 'hidden',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    background: '#ffffff',
-    border: '2px solid #000000',
-    boxSizing: 'border-box',
+    position: 'absolute', overflow: 'hidden',
+    display: 'flex', alignItems: 'center', justifyContent: 'center',
+    background: '#ffffff', border: '2px solid #000000', boxSizing: 'border-box',
   },
   nameInput: {
-    width: '100%',
-    height: '100%',
-    border: 'none',
-    outline: 'none',
-    background: 'transparent',
-    color: '#1a1a2e',
-    fontFamily: 'Georgia, "Times New Roman", serif',
-    fontWeight: 700,
-    textAlign: 'center',
-    cursor: 'text',
-    padding: '4px 12px',
-    boxSizing: 'border-box',
-    resize: 'none',
-    overflow: 'hidden',
-    caretColor: '#1a1a2e',
-    lineHeight: 1.8,
+    width: '100%', height: '100%',
+    border: 'none', outline: 'none', background: 'transparent',
+    color: '#1a1a2e', fontFamily: 'Georgia, "Times New Roman", serif',
+    fontWeight: 700, textAlign: 'center', cursor: 'text',
+    padding: '4px 12px', boxSizing: 'border-box',
+    resize: 'none', overflow: 'hidden',
+    caretColor: '#1a1a2e', lineHeight: 1.25,
     wordBreak: 'break-word',
-    whiteSpace: 'normal',
-    display: 'flex',
-    alignItems: 'center',
   },
-  footer: {
-    padding: '20px 4px 0',
-    display: 'flex',
-    flexDirection: 'column',
-    gap: 10,
-  },
+  footer: { padding: '20px 4px 0', display: 'flex', flexDirection: 'column', gap: 10 },
   btn: {
     background: 'linear-gradient(135deg, #b8891e 0%, #f5c842 50%, #b8891e 100%)',
-    color: '#07101f',
-    border: 'none',
-    borderRadius: 12,
-    padding: '15px',
-    fontSize: 15,
-    fontWeight: 700,
-    cursor: 'pointer',
-    letterSpacing: '0.2px',
+    color: '#07101f', border: 'none', borderRadius: 12,
+    padding: '15px', fontSize: 15, fontWeight: 700, cursor: 'pointer', letterSpacing: '0.2px',
   },
   btnOff: { opacity: 0.4, cursor: 'not-allowed' },
-  note: {
-    margin: 0,
-    fontSize: 11,
-    color: 'rgba(255,255,255,0.22)',
-    lineHeight: 1.6,
-    textAlign: 'center',
-  },
+  note: { margin: 0, fontSize: 11, color: 'rgba(255,255,255,0.22)', lineHeight: 1.6, textAlign: 'center' },
   cropOverlay: {
-    position: 'fixed',
-    inset: 0,
-    background: 'rgba(0,0,0,0.85)',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    zIndex: 1000,
-    padding: 24,
-    boxSizing: 'border-box',
+    position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)',
+    display: 'flex', alignItems: 'center', justifyContent: 'center',
+    zIndex: 1000, padding: 24, boxSizing: 'border-box',
   },
   cropModal: {
-    background: '#0d1b3e',
-    border: '1px solid rgba(255,255,255,0.12)',
-    borderRadius: 16,
-    padding: 24,
-    display: 'flex',
-    flexDirection: 'column',
-    gap: 16,
-    width: '100%',
-    maxWidth: 548,
+    background: '#0d1b3e', border: '1px solid rgba(255,255,255,0.12)',
+    borderRadius: 16, padding: 24, display: 'flex', flexDirection: 'column',
+    gap: 16, width: '100%', maxWidth: 548,
   },
-  cropTitle: {
-    margin: 0,
-    fontSize: 14,
-    color: 'rgba(255,255,255,0.6)',
-    textAlign: 'center',
-    fontFamily: '"Segoe UI", system-ui, sans-serif',
-  },
-  cropZoomRow: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: 12,
-  },
-  cropLabel: {
-    fontSize: 12,
-    color: 'rgba(255,255,255,0.5)',
-    fontFamily: '"Segoe UI", system-ui, sans-serif',
-    whiteSpace: 'nowrap',
-  },
-  cropBtns: {
-    display: 'flex',
-    gap: 12,
-  },
+  cropTitle: { margin: 0, fontSize: 14, color: 'rgba(255,255,255,0.6)', textAlign: 'center', fontFamily: '"Segoe UI", system-ui, sans-serif' },
+  cropZoomRow: { display: 'flex', alignItems: 'center', gap: 12 },
+  cropLabel: { fontSize: 12, color: 'rgba(255,255,255,0.5)', fontFamily: '"Segoe UI", system-ui, sans-serif', whiteSpace: 'nowrap' },
+  cropBtns: { display: 'flex', gap: 12 },
   cropCancel: {
-    flex: 1,
-    padding: '12px',
-    borderRadius: 10,
-    border: '1px solid rgba(255,255,255,0.15)',
-    background: 'transparent',
-    color: 'rgba(255,255,255,0.6)',
-    fontSize: 14,
-    cursor: 'pointer',
+    flex: 1, padding: '12px', borderRadius: 10,
+    border: '1px solid rgba(255,255,255,0.15)', background: 'transparent',
+    color: 'rgba(255,255,255,0.6)', fontSize: 14, cursor: 'pointer',
     fontFamily: '"Segoe UI", system-ui, sans-serif',
   },
   cropConfirm: {
-    flex: 2,
-    padding: '12px',
-    borderRadius: 10,
-    border: 'none',
+    flex: 2, padding: '12px', borderRadius: 10, border: 'none',
     background: 'linear-gradient(135deg, #b8891e 0%, #f5c842 50%, #b8891e 100%)',
-    color: '#07101f',
-    fontSize: 14,
-    fontWeight: 700,
-    cursor: 'pointer',
+    color: '#07101f', fontSize: 14, fontWeight: 700, cursor: 'pointer',
     fontFamily: '"Segoe UI", system-ui, sans-serif',
   },
 }
